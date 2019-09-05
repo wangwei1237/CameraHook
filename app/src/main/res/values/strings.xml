@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">CameraHook</string>
+    <string name="xposed_description">该模块用于Hook摄像头的数据</string>
+</resources>
