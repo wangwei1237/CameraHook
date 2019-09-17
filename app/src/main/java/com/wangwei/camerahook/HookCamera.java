@@ -4,9 +4,12 @@ import android.app.Application;
 import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
+import android.media.MediaPlayer;
 import android.os.Handler;
 import android.util.Log;
+import android.view.Surface;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
@@ -18,6 +21,7 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 public class HookCamera implements IXposedHookLoadPackage {
     private final String TAG = "HookCamera";
+    private SurfaceTexture st = null;
 
     @Override
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
@@ -68,28 +72,10 @@ public class HookCamera implements IXposedHookLoadPackage {
                         @Override
                         protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                             super.beforeHookedMethod(param);
-
-                            //param.setResult("i am new result! before. ");
-                            SurfaceTexture para1 = (SurfaceTexture) param.args[0];
-
-                            Log.d(TAG, "SurfaceTexture class is : " + para1.toString());
-                        }
-                    }
-            );
-
-            XposedHelpers.findAndHookMethod("android.graphics.SurfaceTexture",
-                    lpparam.classLoader,
-                    "setOnFrameAvailableListener",
-                    SurfaceTexture.OnFrameAvailableListener.class,
-                    Handler.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                            super.beforeHookedMethod(param);
-
-                            //param.setResult("i am new result! before. ");
-
-                            Log.d(TAG, " setOnFrameAvailableListener handler is : " );
+                            if (param.args[0] != null) {
+                                st = (SurfaceTexture) param.args[0];
+                                Log.d(TAG, "SurfaceTexture class is : " + st.toString());
+                            }
                         }
                     }
             );
@@ -101,73 +87,62 @@ public class HookCamera implements IXposedHookLoadPackage {
                         @Override
                         protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                             ClassLoader cl     = ((Context)param.args[0]).getClassLoader();
-                            Class<?> hookclass = null;
 
                             try {
-                                hookclass = cl.loadClass("com.ss.android.ttvecamera.f.c");
-                                Log.d(TAG, "查找抖音Camera类成功啦啦");
+                                final Class<?> hookclass = cl.loadClass("com.ss.android.ttvecamera.a");
+                                Log.d(TAG, "查找抖音类ttvecamera.a成功啦啦");
                                 Log.d(TAG, "hookclass is : " + hookclass.toString());
+
+                                XposedHelpers.findAndHookMethod(hookclass,
+                                        "a",
+                                        new XC_MethodHook() {
+                                            @Override
+                                            protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                                                if (st != null) {
+                                                    // 将摄像头的previewTexture设置为空，然后将该Texture对象修改。
+                                                    Field fieldA = hookclass.getDeclaredField("a");
+                                                    fieldA.setAccessible(true);
+                                                    Camera camera = (Camera)fieldA.get(param.thisObject);
+                                                    camera.setPreviewTexture(null);
+                                                    Log.d(TAG, "deattach the camera and surfacetexture first.");
+
+                                                    // 将surfacetexture的生产者设置为video
+                                                    Surface mSurface      = new Surface(st);
+                                                    MediaPlayer mMediaPlayer  = new MediaPlayer();
+                                                    mMediaPlayer.setVolume(0, 0);
+                                                    mMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                                                        @Override
+                                                        public void onPrepared(MediaPlayer mp) {
+                                                            mp.start();
+                                                        }
+                                                    });
+
+                                                    mMediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                                                        @Override
+                                                        public void onCompletion(MediaPlayer mediaPlayer) {
+                                                            mediaPlayer.seekTo(0);
+                                                            mediaPlayer.start();
+                                                        }
+                                                    });
+
+                                                    mMediaPlayer.setSurface(mSurface);
+                                                    mSurface.release();
+
+                                                    try {
+                                                        mMediaPlayer.setDataSource("/sdcard/DCIM/Camera/video_20190909_172631.mp4");
+                                                        mMediaPlayer.prepareAsync();
+                                                    } catch (IOException e) {
+                                                        e.printStackTrace();
+                                                    }
+                                                }
+                                            }
+                                        });
                             } catch (Exception e) {
-                                Log.e(TAG, "查找抖音Camera类出错啦", e);
+                                Log.e(TAG, "查找抖音ttvecamera.a类出错啦", e);
                                 return;
                             }
 
-                            XposedHelpers.findAndHookMethod(hookclass,
-                                    "a",
-                                    new XC_MethodHook() {
-                                        @Override
-                                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                                            super.beforeHookedMethod(param);
 
-                                            /*
-                                            byte[] data = (byte[])param1.args[0];
-                                            Camera camera = (Camera)param1.args[1];
-
-                                            Camera.Parameters cp = camera.getParameters();
-                                            Camera.Size size     = cp.getPreviewSize();
-                                            int width  = size.width;
-                                            int height = size.height;
-                                            */
-
-                                            Log.d(TAG, "The preview width is : ");
-                                            Log.d(TAG, "The preview height is : ");
-                                            Log.d(TAG, "this this.b.c() is : ");
-                                        }
-                                    });
-                        }
-                    }
-            );
-
-            XposedHelpers.findAndHookMethod(Application.class,
-                    "attach",
-                    Context.class,
-                    new XC_MethodHook() {
-                        @Override
-                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                            ClassLoader cl     = ((Context)param.args[0]).getClassLoader();
-                            Class<?> hookclass = null;
-
-                            try {
-                                hookclass = cl.loadClass("com.ss.android.ttvecamera.f.e$1");
-                                Log.d(TAG, "查找抖音f.e$1类成功啦啦");
-                                Log.d(TAG, "hookclass is : " + hookclass.toString());
-                            } catch (Exception e) {
-                                Log.e(TAG, "查找抖音f.e$1类出错啦", e);
-                                return;
-                            }
-
-                            XposedHelpers.findAndHookMethod(hookclass,
-                                    "onFrameAvailable",
-                                    SurfaceTexture.class,
-                                    new XC_MethodHook() {
-                                        @Override
-                                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                                            super.beforeHookedMethod(param);
-                                            SurfaceTexture st = (SurfaceTexture) param.args[0];
-                                            Log.d(TAG, "onFrameAvailable is called.");
-                                            Log.d(TAG, "onFrameAvailable(SurfaceTexture) st is: " + st.toString());
-                                        }
-                                    });
                         }
                     }
             );
