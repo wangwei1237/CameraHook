@@ -5,7 +5,6 @@ import android.content.Context;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
 import android.media.MediaPlayer;
-import android.os.Handler;
 import android.util.Log;
 import android.view.Surface;
 
@@ -22,6 +21,9 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 public class HookCamera implements IXposedHookLoadPackage {
     private final String TAG = "HookCamera";
     private SurfaceTexture st = null;
+    public static Camera camera;
+    public static Surface mSurface;
+    public static MediaPlayer mMediaPlayer;
 
     @Override
     public void handleLoadPackage(final XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
@@ -102,35 +104,51 @@ public class HookCamera implements IXposedHookLoadPackage {
                                                     // 将摄像头的previewTexture设置为空，然后将该Texture对象修改。
                                                     Field fieldA = hookclass.getDeclaredField("a");
                                                     fieldA.setAccessible(true);
-                                                    Camera camera = (Camera)fieldA.get(param.thisObject);
-                                                    camera.setPreviewTexture(null);
-                                                    Log.d(TAG, "deattach the camera and surfacetexture first.");
+
+                                                    HookCamera.camera = (Camera)fieldA.get(param.thisObject);
+                                                    if (HookCamera.camera != null) {
+                                                        HookCamera.camera.setPreviewTexture(null);
+                                                        Log.d(TAG, "deattach the camera and surfacetexture first.");
+                                                    }
+
+                                                    if (HookCamera.mSurface != null) {
+                                                        HookCamera.mSurface.release();
+                                                        HookCamera.mSurface = null;
+                                                        Log.d(TAG, "释放Surface对象");
+                                                    }
+
+                                                    if (HookCamera.mMediaPlayer != null) {
+                                                        HookCamera.mMediaPlayer.release();
+                                                        HookCamera.mMediaPlayer = null;
+                                                        Log.d(TAG, "释放MediaPlayer对象");
+                                                    }
 
                                                     // 将surfacetexture的生产者设置为video
-                                                    Surface mSurface      = new Surface(st);
-                                                    MediaPlayer mMediaPlayer  = new MediaPlayer();
-                                                    mMediaPlayer.setVolume(0, 0);
-                                                    mMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                                                    if (HookCamera.mSurface == null) {
+                                                        HookCamera.mSurface = new Surface(st);
+                                                        Log.d(TAG, "生成Surface对象");
+                                                    }
+
+                                                    if (HookCamera.mMediaPlayer == null) {
+                                                        HookCamera.mMediaPlayer = new MediaPlayer();
+                                                        HookCamera.mMediaPlayer.setSurface(mSurface);
+                                                        HookCamera.mSurface.release();
+                                                        Log.d(TAG, "生成MediaPlayer对象");
+                                                    }
+
+                                                    HookCamera.mMediaPlayer.setVolume(0, 0);
+                                                    HookCamera.mMediaPlayer.setLooping(true);
+
+                                                    HookCamera.mMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                                                         @Override
                                                         public void onPrepared(MediaPlayer mp) {
-                                                            mp.start();
+                                                            HookCamera.mMediaPlayer.start();
                                                         }
                                                     });
-
-                                                    mMediaPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
-                                                        @Override
-                                                        public void onCompletion(MediaPlayer mediaPlayer) {
-                                                            mediaPlayer.seekTo(0);
-                                                            mediaPlayer.start();
-                                                        }
-                                                    });
-
-                                                    mMediaPlayer.setSurface(mSurface);
-                                                    mSurface.release();
 
                                                     try {
-                                                        mMediaPlayer.setDataSource("/sdcard/DCIM/Camera/video_20190909_172631.mp4");
-                                                        mMediaPlayer.prepareAsync();
+                                                        HookCamera.mMediaPlayer.setDataSource("/sdcard/DCIM/Camera/video_20190909_172631.mp4");
+                                                        HookCamera.mMediaPlayer.prepareAsync();
                                                     } catch (IOException e) {
                                                         e.printStackTrace();
                                                     }
